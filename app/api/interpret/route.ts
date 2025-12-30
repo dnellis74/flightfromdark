@@ -179,9 +179,10 @@ ${body.userMessage || "(none)"}
 
     const validated = InterpretResult.parse(parsedJson);
     return NextResponse.json(validated, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Interpret error";
     return NextResponse.json(
-      { error: err?.message ?? "Interpret error", detail: String(err) },
+      { error: errorMessage, detail: String(err) },
       { status: 400 }
     );
   }

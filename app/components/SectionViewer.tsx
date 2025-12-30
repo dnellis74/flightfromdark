@@ -19,10 +19,20 @@ type Sheet = {
   flags: Record<string, boolean>;
 };
 
-type AnyAction = any;
+type Action = {
+  type: "update_stat" | "set_stat" | "add_item" | "remove_item" | "set_flag" | "start_combat";
+  reason: string;
+  stat: "endurance" | "combatSkill" | "gold";
+  delta: number;
+  value: number;
+  item: string;
+  flag: string;
+  flagValue: boolean;
+  enemyName: string;
+};
 
-function applyActions(prev: Sheet, actions: AnyAction[]): Sheet {
-  let next: Sheet = {
+function applyActions(prev: Sheet, actions: Action[]): Sheet {
+  const next: Sheet = {
     ...prev,
     items: [...prev.items],
     flags: { ...prev.flags },
@@ -30,15 +40,27 @@ function applyActions(prev: Sheet, actions: AnyAction[]): Sheet {
 
   for (const a of actions) {
     if (a.type === "update_stat") {
-      (next as any)[a.stat] = ((next as any)[a.stat] ?? 0) + a.delta;
+      if (a.stat === "endurance") {
+        next.endurance = (next.endurance ?? 0) + a.delta;
+      } else if (a.stat === "combatSkill") {
+        next.combatSkill = (next.combatSkill ?? 0) + a.delta;
+      } else if (a.stat === "gold") {
+        next.gold = (next.gold ?? 0) + a.delta;
+      }
     } else if (a.type === "set_stat") {
-      (next as any)[a.stat] = a.value;
+      if (a.stat === "endurance") {
+        next.endurance = a.value;
+      } else if (a.stat === "combatSkill") {
+        next.combatSkill = a.value;
+      } else if (a.stat === "gold") {
+        next.gold = a.value;
+      }
     } else if (a.type === "add_item") {
       if (!next.items.includes(a.item)) next.items.push(a.item);
     } else if (a.type === "remove_item") {
       next.items = next.items.filter((x) => x !== a.item);
     } else if (a.type === "set_flag") {
-      next.flags[a.flag] = a.value;
+      next.flags[a.flag] = a.flagValue;
     } else if (a.type === "start_combat") {
       // POC: surface only. Next step is deterministic combat engine.
     }
@@ -100,7 +122,7 @@ export default function SectionViewer() {
   });
 
   const [assistantMsg, setAssistantMsg] = useState<string>("");
-  const [lastActions, setLastActions] = useState<AnyAction[]>([]);
+  const [lastActions, setLastActions] = useState<Action[]>([]);
   const [interpretErr, setInterpretErr] = useState<string>("");
 
   // 1) Fetch section HTML
