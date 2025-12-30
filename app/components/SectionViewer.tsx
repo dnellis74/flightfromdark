@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { applyActions, type ActionSheet, type Action } from "../lib/gameLogic";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -25,67 +26,6 @@ type Section = {
   choices: Choice[];
   sourceUrl: string;
 };
-
-type ActionSheet = {
-  endurance: number;
-  combatSkill: number;
-  gold: number;
-  items: string[];
-  flags: Record<string, boolean>;
-};
-
-type Action = {
-  type: "update_stat" | "set_stat" | "add_item" | "remove_item" | "set_flag" | "start_combat";
-  reason: string;
-  stat: "endurance" | "combatSkill" | "gold";
-  delta: number;
-  value: number;
-  item: string;
-  flag: string;
-  flagValue: boolean;
-  enemyName: string;
-};
-
-function applyActions(prev: ActionSheet, actions: Action[]): ActionSheet {
-  const next: ActionSheet = {
-    ...prev,
-    items: [...prev.items],
-    flags: { ...prev.flags },
-  };
-
-  for (const a of actions) {
-    if (a.type === "update_stat") {
-      if (a.stat === "endurance") {
-        next.endurance = (next.endurance ?? 0) + a.delta;
-      } else if (a.stat === "combatSkill") {
-        next.combatSkill = (next.combatSkill ?? 0) + a.delta;
-      } else if (a.stat === "gold") {
-        next.gold = (next.gold ?? 0) + a.delta;
-      }
-    } else if (a.type === "set_stat") {
-      if (a.stat === "endurance") {
-        next.endurance = a.value;
-      } else if (a.stat === "combatSkill") {
-        next.combatSkill = a.value;
-      } else if (a.stat === "gold") {
-        next.gold = a.value;
-      }
-    } else if (a.type === "add_item") {
-      if (!next.items.includes(a.item)) next.items.push(a.item);
-    } else if (a.type === "remove_item") {
-      next.items = next.items.filter((x) => x !== a.item);
-    } else if (a.type === "set_flag") {
-      next.flags[a.flag] = a.flagValue;
-    } else if (a.type === "start_combat") {
-      // POC: surface only. Next step is deterministic combat engine.
-    }
-  }
-
-  // Clamp endurance at >= 0
-  next.endurance = Math.max(0, next.endurance);
-
-  return next;
-}
 
 function extractLiveSection(html: string, currentId: number): Section {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -133,8 +73,9 @@ export default function SectionViewer() {
     endurance: 25,
     combatSkill: 15,
     gold: 0,
-    items: [],
-    flags: {},
+    items: ["Axe"],
+    flags: {"Sixth Sense": true},
+    removedChoices: [],
   });
 
   const [assistantMsg, setAssistantMsg] = useState<string>("");
@@ -184,6 +125,8 @@ export default function SectionViewer() {
 
       try {
         const sectionText = section.paragraphs.join("\n\n");
+        // Filter out already-removed choices before sending to API
+        const availableChoices = section.choices.filter((c) => !sheet.removedChoices.includes(c.to));
 
         const res = await fetch("/api/interpret", {
           method: "POST",
@@ -191,7 +134,7 @@ export default function SectionViewer() {
           body: JSON.stringify({
             sectionId: section.id,
             sectionText,
-            choices: section.choices,
+            choices: availableChoices,
             sheet,
             userMessage: "", // later: wire a text input into this
           }),
@@ -327,33 +270,36 @@ export default function SectionViewer() {
           <div style={{ marginTop: 16 }}>
             <h3 style={{ margin: "8px 0", fontSize: isMobile ? 16 : 18 }}>Choices</h3>
 
-            {section.choices.length ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
-                {section.choices.map((c, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setId(c.to)}
-                    disabled={interpreting}
-                    style={{
-                      textAlign: "left",
-                      padding: isMobile ? "14px 12px" : 10,
-                      minHeight: isMobile ? 50 : "auto",
-                      fontSize: isMobile ? 15 : 16,
-                      opacity: interpreting ? 0.5 : 1,
-                      cursor: interpreting ? "not-allowed" : "pointer",
-                      borderRadius: 6,
-                      border: "1px solid #ddd",
-                      background: interpreting ? "#f5f5f5" : "#fff",
-                      color: "#000",
-                    }}
-                  >
-                    {c.label} (→ {c.to})
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16, color: "#333" }}>No choices detected on this section.</div>
-            )}
+            {(() => {
+              const availableChoices = section.choices.filter((c) => !sheet.removedChoices.includes(c.to));
+              return availableChoices.length ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
+                  {availableChoices.map((c, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setId(c.to)}
+                      disabled={interpreting}
+                      style={{
+                        textAlign: "left",
+                        padding: isMobile ? "14px 12px" : 10,
+                        minHeight: isMobile ? 50 : "auto",
+                        fontSize: isMobile ? 15 : 16,
+                        opacity: interpreting ? 0.5 : 1,
+                        cursor: interpreting ? "not-allowed" : "pointer",
+                        borderRadius: 6,
+                        border: "1px solid #ddd",
+                        background: interpreting ? "#f5f5f5" : "#fff",
+                        color: "#000",
+                      }}
+                    >
+                      {c.label} (→ {c.to})
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16, color: "#333" }}>No choices available on this section.</div>
+              );
+            })()}
           </div>
         </>
       ) : null}

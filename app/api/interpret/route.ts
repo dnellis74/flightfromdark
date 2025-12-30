@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ---- Shared constants ----
-const ACTION_TYPES = ["update_stat", "set_stat", "add_item", "remove_item", "set_flag", "start_combat"] as const;
+const ACTION_TYPES = ["update_stat", "set_stat", "add_item", "remove_item", "set_flag", "start_combat", "remove_choice"] as const;
 
 // ---- Request schema (client -> server) ----
 const RequestBody = z.object({
@@ -20,6 +20,7 @@ const RequestBody = z.object({
     gold: z.number().int(),
     items: z.array(z.string()),
     flags: z.record(z.string(), z.boolean()),
+    removedChoices: z.array(z.number().int()),
   }),
   userMessage: z.string().optional().default(""),
 });
@@ -71,6 +72,25 @@ Rules:
 - Never invent stat changes, items, or flags.
 - If combat is required, emit a start_combat action. DO NOT simulate combat.
 - If uncertain, emit no actions and explain briefly in gmMessage.
+- If a game rule prohibits a choice, remove that choice from the choices array.
+
+Game rules:
+- The maximum number of weapons that you may carry is two.
+- Backpack Items must be stored in your Backpack. Because space is limited, you may only keep a maximum of eight articles, including Meals, in your Backpack at any one time.
+- Special Items are not carried in the Backpack. When you discover a Special Item, you will be told how to carry it.
+- Gold Crowns are always carried in the Belt Pouch. It will hold a maximum of fifty crowns.
+- Food is carried in your Backpack. Each Meal counts as one item.
+- Any item that may be of use and can be picked up on your adventure and entered on your Action Chart is given capital letters in the text. Unless you are told it is a Special Item, carry it in your Backpack.
+- If a choice requires a discipline
+-- Check the flags in the action sheet for the discipline.
+-- If a flag for the discipline is not present
+-- emit a remove_choice action with value set to the choice's 'to' field (the section ID the choice leads to).
+- If asked to pick a number from the Random Number Table.
+-- Generate a random number between 0 and 9.
+-- Add the number to the section text.
+-- The number should indicate which choice the player must make.  Keep that choice and emit a remove_choice action not rolled.
+-- Emit stat changes as indicated by the choice
+- If the section text or choices mention you must turn to a specific section, emit a remove_choice action with value set to the section to be removed.
 
 Structured output constraints:
 - You MUST return JSON matching the schema exactly.
@@ -80,9 +100,10 @@ Structured output constraints:
   value: 0
   item: ""
   flag: ""
-  flagValue: false
+  flagValue: []
   enemyName: ""
 - Only the fields relevant to the action type should be non-default.
+- For remove_choice: set value to the section ID (the 'to' field from the choice object, e.g., if choice is {to: 150, label: "Go north"}, set value: 150)
 
 Output MUST be valid JSON. Do not include markdown.
 `.trim();
