@@ -16,7 +16,7 @@ const RequestBody = z.object({
     combatSkill: z.number().int(),
     gold: z.number().int(),
     items: z.array(z.string()),
-    flags: z.record(z.boolean()),
+    flags: z.record(z.string(), z.boolean()),
   }),
   userMessage: z.string().optional().default(""),
 });
