@@ -344,6 +344,7 @@ export default function SectionViewer() {
                       borderRadius: 6,
                       border: "1px solid #ddd",
                       background: interpreting ? "#f5f5f5" : "#fff",
+                      color: "#000",
                     }}
                   >
                     {c.label} (→ {c.to})
@@ -351,7 +352,7 @@ export default function SectionViewer() {
                 ))}
               </div>
             ) : (
-              <div style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16 }}>No choices detected on this section.</div>
+              <div style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16, color: "#333" }}>No choices detected on this section.</div>
             )}
           </div>
         </>
