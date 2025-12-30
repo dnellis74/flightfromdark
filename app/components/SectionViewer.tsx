@@ -66,12 +66,14 @@ function extractLiveSection(html: string, currentId: number): Section {
     .filter(Boolean);
 
   const choices: Choice[] = [];
-  main.querySelectorAll("p.choice a[href]").forEach((a) => {
+  main.querySelectorAll("p.choice").forEach((p) => {
+    const a = p.querySelector("a");
+    if (!a) return;
     const href = a.getAttribute("href") || "";
     const m = href.match(/sect(\d+)\.htm/i);
     if (!m) return;
     const to = Number(m[1]);
-    const label = (a.textContent || "").trim() || `Turn to ${to}`;
+    const label = (p.textContent || "").trim() || `Turn to ${to}`;
     choices.push({ label, to });
   });
 
