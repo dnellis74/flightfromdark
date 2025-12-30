@@ -2,6 +2,21 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 type Choice = { label: string; to: number };
 
 type Section = {
@@ -11,7 +26,7 @@ type Section = {
   sourceUrl: string;
 };
 
-type Sheet = {
+type ActionSheet = {
   endurance: number;
   combatSkill: number;
   gold: number;
@@ -31,8 +46,8 @@ type Action = {
   enemyName: string;
 };
 
-function applyActions(prev: Sheet, actions: Action[]): Sheet {
-  const next: Sheet = {
+function applyActions(prev: ActionSheet, actions: Action[]): ActionSheet {
+  const next: ActionSheet = {
     ...prev,
     items: [...prev.items],
     flags: { ...prev.flags },
@@ -108,12 +123,13 @@ function extractLiveSection(html: string, currentId: number): Section {
 }
 
 export default function SectionViewer() {
+  const isMobile = useIsMobile();
   const [id, setId] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [rawHtml, setRawHtml] = useState<string>("");
   const [err, setErr] = useState<string>("");
 
-  const [sheet, setSheet] = useState<Sheet>({
+  const [sheet, setSheet] = useState<ActionSheet>({
     endurance: 25,
     combatSkill: 15,
     gold: 0,
@@ -124,6 +140,7 @@ export default function SectionViewer() {
   const [assistantMsg, setAssistantMsg] = useState<string>("");
   const [lastActions, setLastActions] = useState<Action[]>([]);
   const [interpretErr, setInterpretErr] = useState<string>("");
+  const [interpreting, setInterpreting] = useState<boolean>(false);
 
   // 1) Fetch section HTML
   useEffect(() => {
@@ -163,6 +180,7 @@ export default function SectionViewer() {
       if (!section) return;
 
       setInterpretErr("");
+      setInterpreting(true);
 
       try {
         const sectionText = section.paragraphs.join("\n\n");
@@ -192,6 +210,8 @@ export default function SectionViewer() {
         }
       } catch (e: unknown) {
         if (!cancelled) setInterpretErr(e instanceof Error ? e.message : "Interpret error");
+      } finally {
+        if (!cancelled) setInterpreting(false);
       }
     }
 
@@ -207,52 +227,76 @@ export default function SectionViewer() {
   }, [section?.id]);
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-        <div style={{ flex: 1, border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Action Sheet</div>
-          <div>Combat Skill: {sheet.combatSkill}</div>
-          <div>Endurance: {sheet.endurance}</div>
-          <div>Gold: {sheet.gold}</div>
-          {sheet.items.length ? <div>Items: {sheet.items.join(", ")}</div> : <div>Items: (none)</div>}
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? 12 : 16, fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 8 : 12, marginBottom: 12 }}>
+        <div style={{ flex: isMobile ? "none" : 1, border: "1px solid #ddd", borderRadius: 8, padding: isMobile ? 10 : 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 14 : 16 }}>Action Sheet</div>
+          <div style={{ fontSize: isMobile ? 13 : 14 }}>Combat Skill: {sheet.combatSkill}</div>
+          <div style={{ fontSize: isMobile ? 13 : 14 }}>Endurance: {sheet.endurance}</div>
+          <div style={{ fontSize: isMobile ? 13 : 14 }}>Gold: {sheet.gold}</div>
+          {sheet.items.length ? (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Items: {sheet.items.join(", ")}</div>
+          ) : (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Items: (none)</div>
+          )}
         </div>
 
-        <div style={{ flex: 2, border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Assistant</div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{assistantMsg || "(no message yet)"}</div>
-          {interpretErr ? <div style={{ color: "crimson", marginTop: 8 }}>{interpretErr}</div> : null}
+        <div style={{ flex: isMobile ? "none" : 2, border: "1px solid #ddd", borderRadius: 8, padding: isMobile ? 10 : 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 14 : 16 }}>Assistant</div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: isMobile ? 13 : 14 }}>{assistantMsg || "(no message yet)"}</div>
+          {interpretErr ? <div style={{ color: "crimson", marginTop: 8, fontSize: isMobile ? 12 : 14 }}>{interpretErr}</div> : null}
 
           {lastActions.length ? (
             <details style={{ marginTop: 8 }}>
-              <summary>Actions</summary>
-              <pre style={{ fontSize: 12, overflowX: "auto" }}>{JSON.stringify(lastActions, null, 2)}</pre>
+              <summary style={{ fontSize: isMobile ? 12 : 14 }}>Actions</summary>
+              <pre style={{ fontSize: 11, overflowX: "auto" }}>{JSON.stringify(lastActions, null, 2)}</pre>
             </details>
           ) : null}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-        <label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 6 : 8, alignItems: "center", marginBottom: 12 }}>
+        <label style={{ fontSize: isMobile ? 14 : 16 }}>
           Section:&nbsp;
           <input
             value={id}
             onChange={(e) => setId(Math.max(1, Number(e.target.value || "1")))}
             type="number"
             min={1}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? 80 : 120, padding: "6px 8px", fontSize: isMobile ? 14 : 16 }}
           />
         </label>
-        <button onClick={() => setId((x) => Math.max(1, x - 1))}>Prev</button>
-        <button onClick={() => setId((x) => x + 1)}>Next</button>
-        {loading ? <span>Loading…</span> : null}
-        {err ? <span style={{ color: "crimson" }}>{err}</span> : null}
+        <button
+          onClick={() => setId((x) => Math.max(1, x - 1))}
+          style={{
+            minHeight: isMobile ? 44 : "auto",
+            minWidth: isMobile ? 60 : "auto",
+            padding: isMobile ? "10px 16px" : "6px 12px",
+            fontSize: isMobile ? 14 : 16,
+          }}
+        >
+          Prev
+        </button>
+        <button
+          onClick={() => setId((x) => x + 1)}
+          style={{
+            minHeight: isMobile ? 44 : "auto",
+            minWidth: isMobile ? 60 : "auto",
+            padding: isMobile ? "10px 16px" : "6px 12px",
+            fontSize: isMobile ? 14 : 16,
+          }}
+        >
+          Next
+        </button>
+        {loading ? <span style={{ fontSize: isMobile ? 14 : 16 }}>Loading…</span> : null}
+        {err ? <span style={{ color: "crimson", fontSize: isMobile ? 13 : 14 }}>{err}</span> : null}
       </div>
 
       {section ? (
         <>
-          <div style={{ fontSize: 12, marginBottom: 8 }}>
+          <div style={{ fontSize: isMobile ? 11 : 12, marginBottom: 8, color: "#333" }}>
             Source:{" "}
-            <a href={section.sourceUrl} target="_blank" rel="noreferrer">
+            <a href={section.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "#0066cc" }}>
               Project Aon sect{section.id}
             </a>
           </div>
@@ -261,37 +305,53 @@ export default function SectionViewer() {
             style={{
               border: "1px solid #ddd",
               borderRadius: 8,
-              padding: 16,
+              padding: isMobile ? 12 : 16,
               lineHeight: 1.5,
               background: "#fff",
+              color: "#000",
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Section {section.id}</div>
+            <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 700, marginBottom: 10, color: "#000" }}>Section {section.id}</div>
 
             {section.paragraphs.length ? (
               section.paragraphs.map((t, idx) => (
-                <p key={idx} style={{ margin: "10px 0" }}>
+                <p key={idx} style={{ margin: "10px 0", fontSize: isMobile ? 14 : 16, color: "#000" }}>
                   {t}
                 </p>
               ))
             ) : (
-              <p style={{ opacity: 0.7 }}>No narrative text detected.</p>
+              <p style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16, color: "#333" }}>No narrative text detected.</p>
             )}
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <h3 style={{ margin: "8px 0" }}>Choices</h3>
+            <h3 style={{ margin: "8px 0", fontSize: isMobile ? 16 : 18 }}>Choices</h3>
 
             {section.choices.length ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
                 {section.choices.map((c, idx) => (
-                  <button key={idx} onClick={() => setId(c.to)} style={{ textAlign: "left", padding: 10 }}>
+                  <button
+                    key={idx}
+                    onClick={() => setId(c.to)}
+                    disabled={interpreting}
+                    style={{
+                      textAlign: "left",
+                      padding: isMobile ? "14px 12px" : 10,
+                      minHeight: isMobile ? 50 : "auto",
+                      fontSize: isMobile ? 15 : 16,
+                      opacity: interpreting ? 0.5 : 1,
+                      cursor: interpreting ? "not-allowed" : "pointer",
+                      borderRadius: 6,
+                      border: "1px solid #ddd",
+                      background: interpreting ? "#f5f5f5" : "#fff",
+                    }}
+                  >
                     {c.label} (→ {c.to})
                   </button>
                 ))}
               </div>
             ) : (
-              <div style={{ opacity: 0.7 }}>No choices detected on this section.</div>
+              <div style={{ opacity: 0.7, fontSize: isMobile ? 14 : 16 }}>No choices detected on this section.</div>
             )}
           </div>
         </>

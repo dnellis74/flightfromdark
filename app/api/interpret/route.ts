@@ -6,6 +6,9 @@ export const runtime = "nodejs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ---- Shared constants ----
+const ACTION_TYPES = ["update_stat", "set_stat", "add_item", "remove_item", "set_flag", "start_combat"] as const;
+
 // ---- Request schema (client -> server) ----
 const RequestBody = z.object({
   sectionId: z.number().int(),
@@ -27,14 +30,7 @@ const RequestBody = z.object({
 // Workaround: use a "wide" action object with neutral defaults for unused fields.
 const ActionWide = z
   .object({
-    type: z.enum([
-      "update_stat",
-      "set_stat",
-      "add_item",
-      "remove_item",
-      "set_flag",
-      "start_combat",
-    ]),
+    type: z.enum(ACTION_TYPES),
     reason: z.string(),
 
     // Always present (neutral defaults when unused)
@@ -118,14 +114,7 @@ ${body.userMessage || "(none)"}
             properties: {
               type: {
                 type: "string",
-                enum: [
-                  "update_stat",
-                  "set_stat",
-                  "add_item",
-                  "remove_item",
-                  "set_flag",
-                  "start_combat",
-                ],
+                enum: ACTION_TYPES,
               },
               reason: { type: "string" },
 
