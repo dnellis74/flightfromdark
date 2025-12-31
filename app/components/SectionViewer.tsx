@@ -82,6 +82,7 @@ export default function SectionViewer() {
   const [lastActions, setLastActions] = useState<Action[]>([]);
   const [interpretErr, setInterpretErr] = useState<string>("");
   const [interpreting, setInterpreting] = useState<boolean>(false);
+  const [combatLog, setCombatLog] = useState<string[]>([]);
 
   // 1) Fetch section HTML
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function SectionViewer() {
     async function run() {
       setLoading(true);
       setErr("");
+      setCombatLog([]); // Clear combat log when changing sections
       try {
         const res = await fetch(`/api/sect/${id}`);
         if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
@@ -110,8 +112,16 @@ export default function SectionViewer() {
 
   const section = useMemo(() => {
     if (!rawHtml) return null;
-    return extractLiveSection(rawHtml, id);
-  }, [rawHtml, id]);
+    const baseSection = extractLiveSection(rawHtml, id);
+    // Append combat log to section paragraphs if present
+    if (combatLog.length > 0) {
+      return {
+        ...baseSection,
+        paragraphs: [...baseSection.paragraphs, "", "=== COMBAT LOG ===", ...combatLog],
+      };
+    }
+    return baseSection;
+  }, [rawHtml, id, combatLog]);
 
   // 2) Interpret section with LLM (once per section entry)
   useEffect(() => {
@@ -149,7 +159,11 @@ export default function SectionViewer() {
         setLastActions(Array.isArray(out.actions) ? out.actions : []);
 
         if (Array.isArray(out.actions) && out.actions.length) {
-          setSheet((prev) => applyActions(prev, out.actions));
+          const result = applyActions(sheet, out.actions);
+          setSheet(result.updatedSheet);
+          if (result.combatLog.length > 0) {
+            setCombatLog(result.combatLog);
+          }
         }
       } catch (e: unknown) {
         if (!cancelled) setInterpretErr(e instanceof Error ? e.message : "Interpret error");
