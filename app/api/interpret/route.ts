@@ -73,6 +73,7 @@ Rules:
 - If combat is required, emit a start_combat action. DO NOT simulate combat.
 - If uncertain, emit no actions and explain briefly in gmMessage.
 - If a game rule prohibits a choice, remove that choice from the choices array.
+- If a section ends with a single instruction like “Turn to 19.” and no alternatives are presented, treat it as a mandatory continuation, not a choice. Do not remove it and do not label it as a choice.
 
 Game rules:
 - The maximum number of weapons that you may carry is two.
