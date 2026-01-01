@@ -14,7 +14,12 @@ export type Enemy = {
   enemyName: string;
   combatSkill: number;
   endurance: number;
+  enemyModifier?: number;
+};
+
+export type Combat = {
   combatModifier?: number;
+  enemy: Enemy[];
 };
 
 export type CombatRound = {
@@ -55,7 +60,7 @@ export type Action = {
   item: string;
   flag: string;
   flagValue: boolean;
-  enemies: Enemy[];
+  combat: Combat;
 };
 
 export type CombatModifiers = {
@@ -91,7 +96,7 @@ export function resolveCombat(
   const totalLoneWolfCS = sheet.combatSkill + combatSkillBonus;
 
   const enemyDisplayName = enemy.enemyName || enemy.enemyType || "Enemy";
-  const enemyModifier = enemy.combatModifier ?? 0;
+  const enemyModifier = enemy.enemyModifier ?? 0;
   const enemyCSDisplay = enemy.combatSkill + (enemyModifier !== 0 ? enemyModifier : 0);
   const enemyCSStr = enemyModifier !== 0 ? `${enemy.combatSkill} + ${enemyModifier} = ${enemyCSDisplay}` : `${enemy.combatSkill}`;
   combatLog.push(`Combat begins: ${enemyDisplayName} (CS: ${enemyCSStr}, EP: ${enemy.endurance}) vs Lone Wolf (CS: ${sheet.combatSkill}${combatSkillBonus !== 0 ? ` + ${combatSkillBonus}` : ""}, EP: ${loneWolfEndurance})`);
@@ -99,7 +104,7 @@ export function resolveCombat(
   // Combat loop continues until one character's endurance reaches 0 or below
   while (loneWolfEndurance > 0 && enemyEndurance > 0) {
     // Calculate Combat Ratio: (Lone Wolf CS + modifiers) - (Enemy CS + enemy modifiers)
-    const enemyCombatSkill = enemy.combatSkill + (enemy.combatModifier ?? 0);
+    const enemyCombatSkill = enemy.combatSkill + (enemy.enemyModifier ?? 0);
     const combatRatio = totalLoneWolfCS - enemyCombatSkill;
     const clampedRatio = clampRatio(combatRatio);
 
@@ -146,10 +151,14 @@ export function resolveCombat(
     enemyEndurance = Math.max(0, enemyEndurance);
 
     // Create round log entry
-    let message = `Round ${roundNumber}: Ratio=${combatRatio}, Random=${randomNumber} -> Enemy loses ${enemyDamage}, Lone Wolf loses ${loneWolfDamage}`;
+    const isCritical = randomNumber === 0 || randomNumber === 1;
+    const criticalTag = isCritical ? " CRITICAL" : "";
+    let message = `Round ${roundNumber}: Ratio=${combatRatio}, Random=${randomNumber}${criticalTag} -> Enemy loses ${enemyDamage}, Lone Wolf loses ${loneWolfDamage}`;
     if (evade) {
       message += ` (Evading)`;
     }
+    // Add running endurance totals
+    message += ` | Enemy EP: ${enemyEndurance}, Lone Wolf EP: ${loneWolfEndurance}`;
 
     rounds.push({
       round: roundNumber,
@@ -219,10 +228,16 @@ function getCRTResult(ratio: number, dieRoll: number): CRTCell {
 // Resolve combat against multiple enemies sequentially
 export function resolveMultiCombat(
   sheet: ActionSheet,
-  enemies: Enemy[],
+  combat: Combat,
   modifiers: CombatModifiers = {},
   evade: boolean = false
 ): MultiCombatResult {
+  const enemies = combat.enemy;
+  // Combine combat-level modifier with Lone Wolf modifiers
+  const totalCombatModifier = (combat.combatModifier ?? 0) + (modifiers.combatSkillBonus ?? 0);
+  const adjustedModifiers: CombatModifiers = {
+    combatSkillBonus: totalCombatModifier,
+  };
   const allCombatLogs: string[] = [];
   const allRounds: CombatRound[] = [];
   const winners: Array<{ enemy: Enemy; winner: "Lone Wolf" | "Enemy" | null }> = [];
@@ -248,7 +263,7 @@ export function resolveMultiCombat(
     }
 
     // Fight this enemy
-    const combatResult = resolveCombat(currentSheet, enemy, modifiers, evade);
+    const combatResult = resolveCombat(currentSheet, enemy, adjustedModifiers, evade);
     
     // Append this combat's logs
     allCombatLogs.push(...combatResult.combatLog);
@@ -328,13 +343,13 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
         next.removedChoices.push(choiceSectionId);
       }
     } else if (a.type === "start_combat") {
-      // Fight all enemies in the array sequentially
-      if (a.enemies && a.enemies.length > 0) {
+      // Fight all enemies in the combat struct sequentially
+      if (a.combat && a.combat.enemy && a.combat.enemy.length > 0) {
         // Calculate combat modifiers from flags/disciplines
         const modifiers: CombatModifiers = {
           combatSkillBonus: 0, // TODO: Calculate from disciplines/flags
         };
-        const multiCombatResult = resolveMultiCombat(next, a.enemies, modifiers, false);
+        const multiCombatResult = resolveMultiCombat(next, a.combat, modifiers, false);
         next.endurance = multiCombatResult.updatedSheet.endurance;
         next.items = multiCombatResult.updatedSheet.items;
         next.flags = multiCombatResult.updatedSheet.flags;

@@ -34,7 +34,12 @@ const EnemySchema = z.object({
   enemyName: z.string(),
   combatSkill: z.number().int(),
   endurance: z.number().int(),
+  enemyModifier: z.number().int().optional().default(0),
+});
+
+const CombatSchema = z.object({
   combatModifier: z.number().int().optional().default(0),
+  enemy: z.array(EnemySchema),
 });
 
 const ActionWide = z
@@ -52,7 +57,7 @@ const ActionWide = z
     flag: z.string(),
     flagValue: z.boolean(),
 
-    enemies: z.array(EnemySchema),
+    combat: CombatSchema,
   })
   .strict();
 
@@ -111,16 +116,18 @@ Structured output hard constraints:
   item: ""
   flag: ""
   flagValue: false
-  enemies: []
+  combat: { combatModifier: 0, enemy: [] }
 - Only the fields relevant to the action type should be non-default.
 - For remove_choice: set value to the section ID (the 'to' field from the choice object, e.g., if choice is {to: 150, label: "Go north"}, set value: 150)
-- For start_combat: set enemies to an array of enemy objects. Each enemy object must have:
-  - enemyType: string (e.g., "Giant Vulture", "Giak", "Doomwolf")
-  - enemyName: string (e.g., "Vicious Vulture", "Giak Warrior", "Pack Leader")
-  - combatSkill: integer (the enemy's combat skill)
-  - endurance: integer (the enemy's endurance points)
-  - combatModifier: integer (optional, defaults to 0, any combat skill bonus/penalty)
-  If combat involves multiple enemies, include all of them in the array. For single enemy combat, use an array with one enemy object.
+- For start_combat: set combat to an object with:
+  - combatModifier: integer (optional, defaults to 0, combat skill bonus/penalty applied to Lone Wolf for this combat)
+  - enemy: array of enemy objects. Each enemy object must have:
+    - enemyType: string (e.g., "Giant Vulture", "Giak", "Doomwolf")
+    - enemyName: string (e.g., "Vicious Vulture", "Giak Warrior", "Pack Leader")
+    - combatSkill: integer (the enemy's combat skill)
+    - endurance: integer (the enemy's endurance points)
+    - enemyModifier: integer (required, any combat skill bonus/penalty specific to this enemy)
+  If combat involves multiple enemies, include all of them in the enemy array. For single enemy combat, use an array with one enemy object.
 
 Output MUST be valid JSON. Do not include markdown.
 `.trim();
@@ -165,20 +172,28 @@ ${body.userMessage || "(none)"}
               flag: { type: "string" },
               flagValue: { type: "boolean" },
 
-              enemies: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    enemyType: { type: "string" },
-                    enemyName: { type: "string" },
-                    combatSkill: { type: "integer" },
-                    endurance: { type: "integer" },
-                    combatModifier: { type: "integer" },
+              combat: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  combatModifier: { type: "integer" },
+                  enemy: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        enemyType: { type: "string" },
+                        enemyName: { type: "string" },
+                        combatSkill: { type: "integer" },
+                        endurance: { type: "integer" },
+                        enemyModifier: { type: "integer" },
+                      },
+                      required: ["enemyType", "enemyName", "combatSkill", "endurance", "enemyModifier"],
+                    },
                   },
-                  required: ["enemyType", "enemyName", "combatSkill", "endurance", "combatModifier"],
                 },
+                required: ["combatModifier", "enemy"],
               },
             },
             // REQUIRED MUST INCLUDE ALL PROPERTIES
@@ -191,7 +206,7 @@ ${body.userMessage || "(none)"}
               "item",
               "flag",
               "flagValue",
-              "enemies",
+              "combat",
             ],
           },
         },
