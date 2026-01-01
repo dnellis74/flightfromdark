@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { applyActions, type ActionSheet, type Action } from "../lib/gameLogic";
+import { applyActions, type ActionSheet, type Action, SKIP_LLM_SECTIONS } from "../lib/gameLogic";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -156,6 +156,14 @@ export default function SectionViewer() {
 
     async function interpret() {
       if (!section) return;
+      
+      // Skip LLM processing if section ID is in the skip list
+      if (SKIP_LLM_SECTIONS.includes(section.id)) {
+        setAssistantMsg(`This section (${section.id}) is configured to skip LLM processing. You can proceed with the available choices.`);
+        setLastActions([]);
+        setInterpreting(false);
+        return;
+      }
 
       setInterpretErr("");
       setInterpreting(true);

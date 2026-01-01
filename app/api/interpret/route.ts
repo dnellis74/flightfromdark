@@ -80,6 +80,19 @@ export async function POST(req: Request) {
     }
 
     const json = await req.json();
+    
+    // Convert droppedItems string keys to numbers (JSON always uses string keys for object keys)
+    if (json.sheet?.droppedItems && typeof json.sheet.droppedItems === 'object') {
+      const converted: Record<number, string[]> = {};
+      for (const [key, value] of Object.entries(json.sheet.droppedItems)) {
+        const numKey = Number(key);
+        if (!isNaN(numKey) && Array.isArray(value)) {
+          converted[numKey] = value as string[];
+        }
+      }
+      json.sheet.droppedItems = converted;
+    }
+    
     const body = RequestBody.parse(json);
 
     const system = `
@@ -103,11 +116,13 @@ Random Number Table:
 - Add the number to the section text.
 - The number should indicate which choice the player must make.  Keep that choice and emit a remove_choice action not rolled.
 - Emit stat changes as required by outcome of the random number.
+
 Item handling:
 - When an item is available to pick up in the section text, emit a drop_item action with item set to the item name.
 - DO NOT emit add_item actions. The player will pick up items themselves by clicking the choice that appears.
 - DO NOT automatically add items to inventory. Only emit drop_item events to make items available as choices.
 - The drop_item action does not need sectionId - it will automatically use the current section.
+- Just because an item is available to pick up in the section text does not mean it should be dropped. Only drop items that are explicitly mentioned in the section text.
 
 Structured output hard constraints:
 - You MUST return JSON matching the schema exactly.
