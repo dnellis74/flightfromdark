@@ -1,10 +1,16 @@
 import { CRT, type CRTCell } from "./crt";
 
+export interface Inventory {
+  weapons: string[]; // Two weapon slots
+  pouch: number; // Gold stored as int
+  backpack: string[]; // Holds 8 items
+  special: Array<[string, string]>; // Tuple of [location, item], e.g., ["head", "helmet"]
+}
+
 export type ActionSheet = {
   endurance: number;
   combatSkill: number;
-  gold: number;
-  items: string[];
+  inventory: Inventory;
   flags: Record<string, boolean>;
   removedChoices: number[];
 };
@@ -305,7 +311,12 @@ export type ApplyActionsResult = {
 export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActionsResult {
   const next: ActionSheet = {
     ...prev,
-    items: [...prev.items],
+    inventory: {
+      weapons: [...prev.inventory.weapons],
+      pouch: prev.inventory.pouch,
+      backpack: [...prev.inventory.backpack],
+      special: [...prev.inventory.special],
+    },
     flags: { ...prev.flags },
     removedChoices: [...prev.removedChoices],
   };
@@ -319,7 +330,7 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
       } else if (a.stat === "combatSkill") {
         next.combatSkill = (next.combatSkill ?? 0) + a.delta;
       } else if (a.stat === "gold") {
-        next.gold = (next.gold ?? 0) + a.delta;
+        next.inventory.pouch = (next.inventory.pouch ?? 0) + a.delta;
       }
     } else if (a.type === "set_stat") {
       if (a.stat === "endurance") {
@@ -327,12 +338,18 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
       } else if (a.stat === "combatSkill") {
         next.combatSkill = a.value;
       } else if (a.stat === "gold") {
-        next.gold = a.value;
+        next.inventory.pouch = a.value;
       }
     } else if (a.type === "add_item") {
-      if (!next.items.includes(a.item)) next.items.push(a.item);
+      // For now, add items to backpack. This can be refined later to handle weapons and special items.
+      if (!next.inventory.backpack.includes(a.item)) {
+        next.inventory.backpack.push(a.item);
+      }
     } else if (a.type === "remove_item") {
-      next.items = next.items.filter((x) => x !== a.item);
+      // Remove from backpack, weapons, or special items
+      next.inventory.backpack = next.inventory.backpack.filter((x) => x !== a.item);
+      next.inventory.weapons = next.inventory.weapons.filter((x) => x !== a.item);
+      next.inventory.special = next.inventory.special.filter((tuple) => tuple[1] !== a.item);
     } else if (a.type === "set_flag") {
       next.flags[a.flag] = a.flagValue;
     } else if (a.type === "remove_choice") {
@@ -351,7 +368,7 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
         };
         const multiCombatResult = resolveMultiCombat(next, a.combat, modifiers, false);
         next.endurance = multiCombatResult.updatedSheet.endurance;
-        next.items = multiCombatResult.updatedSheet.items;
+        next.inventory = multiCombatResult.updatedSheet.inventory;
         next.flags = multiCombatResult.updatedSheet.flags;
         next.removedChoices = multiCombatResult.updatedSheet.removedChoices;
         combatLogs.push(...multiCombatResult.combatLog);

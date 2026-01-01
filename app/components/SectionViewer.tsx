@@ -73,8 +73,12 @@ export default function SectionViewer() {
   const [sheet, setSheet] = useState<ActionSheet>({
     endurance: 25,
     combatSkill: 15,
-    gold: 0,
-    items: ["Axe"],
+    inventory: {
+      weapons: ["Axe"],
+      pouch: 0,
+      backpack: [],
+      special: [],
+    },
     flags: {"Sixth Sense": true},
     removedChoices: [],
   });
@@ -191,11 +195,17 @@ export default function SectionViewer() {
           <div style={{ fontWeight: 700, marginBottom: 8, fontSize: isMobile ? 14 : 16 }}>Action Sheet</div>
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Combat Skill: {sheet.combatSkill}</div>
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Endurance: {sheet.endurance}</div>
-          <div style={{ fontSize: isMobile ? 13 : 14 }}>Gold: {sheet.gold}</div>
-          {sheet.items.length ? (
-            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Items: {sheet.items.join(", ")}</div>
-          ) : (
-            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Items: (none)</div>
+          <div style={{ fontSize: isMobile ? 13 : 14 }}>Gold: {sheet.inventory.pouch}</div>
+          {sheet.inventory.weapons.length > 0 && (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Weapons: {sheet.inventory.weapons.join(", ") || "(none)"}</div>
+          )}
+          {sheet.inventory.backpack.length > 0 && (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Backpack: {sheet.inventory.backpack.join(", ")}</div>
+          )}
+          {sheet.inventory.special.length > 0 && (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
+              Special: {sheet.inventory.special.map(([loc, item]) => `${loc}: ${item}`).join(", ")}
+            </div>
           )}
         </div>
 

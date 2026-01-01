@@ -17,8 +17,12 @@ const RequestBody = z.object({
   sheet: z.object({
     endurance: z.number().int(),
     combatSkill: z.number().int(),
-    gold: z.number().int(),
-    items: z.array(z.string()),
+    inventory: z.object({
+      weapons: z.array(z.string()),
+      pouch: z.number().int(),
+      backpack: z.array(z.string()),
+      special: z.array(z.tuple([z.string(), z.string()])),
+    }),
     flags: z.record(z.string(), z.boolean()),
     removedChoices: z.array(z.number().int()),
   }),
