@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ---- Shared constants ----
-const ACTION_TYPES = ["update_stat", "set_stat", "add_item", "remove_item", "set_flag", "start_combat", "remove_choice"] as const;
+const ACTION_TYPES = ["update_stat", "set_stat", "drop_item", "add_item", "remove_item", "set_flag", "start_combat", "remove_choice"] as const;
 
 // ---- Request schema (client -> server) ----
 const RequestBody = z.object({
@@ -25,6 +25,7 @@ const RequestBody = z.object({
     }),
     flags: z.record(z.string(), z.boolean()),
     removedChoices: z.array(z.number().int()),
+    droppedItems: z.record(z.number().int(), z.array(z.string())),
   }),
   userMessage: z.string().optional().default(""),
 });
@@ -85,31 +86,28 @@ export async function POST(req: Request) {
 You are a Lone Wolf rules assistant embedded in a game engine.
 
 Rules:
-- Produce ONLY actions explicitly supported by the section text or the user's explicit message.
+- ONLY emita ctions explicitly supported by the section text or the user's explicit message.
 - Never invent stat changes, items, or flags.
-- If combat is required, emit a start_combat action. DO NOT simulate combat.
+- DO NOT simulate combat. If combat is required, emit a start_combat action.
 - If uncertain, emit no actions and explain briefly in gmMessage.
 - If a game rule prohibits a choice, remove that choice from the choices array.
-- If a section ends with a single instruction like “Turn to 19.” and no alternatives are presented, treat it as a mandatory continuation, not a choice. Do not remove it and do not label it as a choice.
+- If a section ends with a single instruction like "Turn to 19." and no alternatives are presented, treat it as a mandatory continuation, not a choice. Do not remove it and do not label it as a choice.
+- If the section text or choices state you must turn to a specific section due to condition, emit a remove_choice action with value set to the section to be removed.
 - If a choice requires a discipline
 -- Check the flags in the action sheet for the discipline.
--- If a flag for the discipline is not present
--- emit a remove_choice action with value set to the choice's 'to' field (the section ID the choice leads to).
+-- If a flag for the discipline is not present emit a remove_choice action with value set to the choice's 'to' field (the section ID the choice leads to).
+
+Random Number Table:
 - If asked to pick a number from the Random Number Table.
--- Generate a random number between 0 and 9.
--- Add the number to the section text.
--- The number should indicate which choice the player must make.  Keep that choice and emit a remove_choice action not rolled.
--- Emit stat changes as indicated by the choice
-- If the section text or choices mention you must turn to a specific section, emit a remove_choice action with value set to the section to be removed.
-
-Game rules:
-- The maximum number of weapons that you may carry is two.
-- Backpack Items must be stored in your Backpack. Because space is limited, you may only keep a maximum of eight articles, including Meals, in your Backpack at any one time.
-- Special Items are not carried in the Backpack. When you discover a Special Item, you will be told how to carry it.
-- Gold Crowns are always carried in the Belt Pouch. It will hold a maximum of fifty crowns.
-- Food is carried in your Backpack. Each Meal counts as one item.
-- Any item that may be of use and can be picked up on your adventure and entered on your Action Chart is given capital letters in the text. Unless you are told it is a Special Item, carry it in your Backpack.
-
+- Generate a random number between 0 and 9.
+- Add the number to the section text.
+- The number should indicate which choice the player must make.  Keep that choice and emit a remove_choice action not rolled.
+- Emit stat changes as required by outcome of the random number.
+Item handling:
+- When an item is available to pick up in the section text, emit a drop_item action with item set to the item name.
+- DO NOT emit add_item actions. The player will pick up items themselves by clicking the choice that appears.
+- DO NOT automatically add items to inventory. Only emit drop_item events to make items available as choices.
+- The drop_item action does not need sectionId - it will automatically use the current section.
 
 Structured output hard constraints:
 - You MUST return JSON matching the schema exactly.

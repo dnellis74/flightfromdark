@@ -19,7 +19,7 @@ function useIsMobile() {
   return isMobile;
 }
 
-type Choice = { label: string; to: number };
+type Choice = { label: string; to: number; isDroppedItem?: boolean; itemName?: string };
 
 type Section = {
   id: number;
@@ -81,6 +81,7 @@ export default function SectionViewer() {
     },
     flags: {"Sixth Sense": true},
     removedChoices: [],
+    droppedItems: {},
   });
 
   const [assistantMsg, setAssistantMsg] = useState<string>("");
@@ -118,15 +119,36 @@ export default function SectionViewer() {
   const section = useMemo(() => {
     if (!rawHtml) return null;
     const baseSection = extractLiveSection(rawHtml, id);
+    
+    // Add choices for dropped items at this section
+    const droppedItemsForSection = sheet.droppedItems[id] || [];
+    
+    // Debug logging
+    if (droppedItemsForSection.length > 0) {
+      console.log(`[Section ${id}] Dropped items found:`, droppedItemsForSection);
+    }
+    
+    const droppedItemChoices: Choice[] = droppedItemsForSection.map((item) => ({
+      label: `Pick up ${item}`,
+      to: id, // Stay on same section
+      isDroppedItem: true,
+      itemName: item,
+    }));
+    
+    const sectionWithDroppedItems = {
+      ...baseSection,
+      choices: [...baseSection.choices, ...droppedItemChoices],
+    };
+    
     // Append combat log to section paragraphs if present
     if (combatLog.length > 0) {
       return {
-        ...baseSection,
-        paragraphs: [...baseSection.paragraphs, "", "=== COMBAT LOG ===", ...combatLog],
+        ...sectionWithDroppedItems,
+        paragraphs: [...sectionWithDroppedItems.paragraphs, "", "=== COMBAT LOG ===", ...combatLog],
       };
     }
-    return baseSection;
-  }, [rawHtml, id, combatLog]);
+    return sectionWithDroppedItems;
+  }, [rawHtml, id, combatLog, sheet.droppedItems]);
 
   // 2) Interpret section with LLM (once per section entry)
   useEffect(() => {
@@ -140,8 +162,10 @@ export default function SectionViewer() {
 
       try {
         const sectionText = section.paragraphs.join("\n\n");
-        // Filter out already-removed choices before sending to API
-        const availableChoices = section.choices.filter((c) => !sheet.removedChoices.includes(c.to));
+        // Filter out already-removed choices and dropped item choices before sending to API
+        const availableChoices = section.choices
+          .filter((c) => !c.isDroppedItem && !sheet.removedChoices.includes(c.to))
+          .map(({ isDroppedItem: _, itemName: __, ...choice }) => choice); // Remove dropped item fields
 
         const res = await fetch("/api/interpret", {
           method: "POST",
@@ -164,7 +188,19 @@ export default function SectionViewer() {
         setLastActions(Array.isArray(out.actions) ? out.actions : []);
 
         if (Array.isArray(out.actions) && out.actions.length) {
-          const result = applyActions(sheet, out.actions);
+          // Debug: log drop_item actions
+          const dropItemActions = out.actions.filter((a: Action) => a.type === "drop_item");
+          if (dropItemActions.length > 0) {
+            console.log("Drop item actions received:", dropItemActions);
+          }
+          
+          const result = applyActions(sheet, out.actions, section.id);
+          
+          // Debug: log updated droppedItems
+          if (Object.keys(result.updatedSheet.droppedItems).length > 0) {
+            console.log("Updated droppedItems:", result.updatedSheet.droppedItems);
+          }
+          
           setSheet(result.updatedSheet);
           if (result.combatLog.length > 0) {
             setCombatLog(result.combatLog);
@@ -296,28 +332,70 @@ export default function SectionViewer() {
             <h3 style={{ margin: "8px 0", fontSize: isMobile ? 16 : 18 }}>Choices</h3>
 
             {(() => {
-              const availableChoices = section.choices.filter((c) => !sheet.removedChoices.includes(c.to));
+              const availableChoices = section.choices.filter((c) => 
+                c.isDroppedItem || !sheet.removedChoices.includes(c.to)
+              );
               return availableChoices.length ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 10 : 8 }}>
                   {availableChoices.map((c, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setId(c.to)}
-                      disabled={interpreting}
+                      onClick={() => {
+                        if (c.isDroppedItem && c.itemName) {
+                          // Emit add_item action for dropped item
+                          const itemName = c.itemName;
+                          const addItemAction: Action = {
+                            type: "add_item",
+                            reason: `Picked up ${itemName} from section ${section.id}`,
+                            stat: "endurance",
+                            delta: 0,
+                            value: 0,
+                            item: itemName,
+                            flag: "",
+                            flagValue: false,
+                            combat: { combatModifier: 0, enemy: [] },
+                          };
+                          
+                          const result = applyActions(sheet, [addItemAction]);
+                          setSheet(result.updatedSheet);
+                          
+                          // Remove from dropped items
+                          setSheet((prev) => {
+                            const newDroppedItems = { ...prev.droppedItems };
+                            const sectionId = section?.id;
+                            if (sectionId && newDroppedItems[sectionId]) {
+                              const filtered = newDroppedItems[sectionId].filter((item) => item !== itemName);
+                              if (filtered.length === 0) {
+                                delete newDroppedItems[sectionId];
+                              } else {
+                                newDroppedItems[sectionId] = filtered;
+                              }
+                            }
+                            return {
+                              ...prev,
+                              droppedItems: newDroppedItems,
+                            };
+                          });
+                        } else {
+                          // Regular choice - navigate to section
+                          setId(c.to);
+                        }
+                      }}
+                      disabled={interpreting && !c.isDroppedItem}
                       style={{
                         textAlign: "left",
                         padding: isMobile ? "14px 12px" : 10,
                         minHeight: isMobile ? 50 : "auto",
                         fontSize: isMobile ? 15 : 16,
-                        opacity: interpreting ? 0.5 : 1,
-                        cursor: interpreting ? "not-allowed" : "pointer",
+                        opacity: (interpreting && !c.isDroppedItem) ? 0.5 : 1,
+                        cursor: (interpreting && !c.isDroppedItem) ? "not-allowed" : "pointer",
                         borderRadius: 6,
                         border: "1px solid #ddd",
-                        background: interpreting ? "#f5f5f5" : "#fff",
+                        background: (interpreting && !c.isDroppedItem) ? "#f5f5f5" : c.isDroppedItem ? "#e8f5e9" : "#fff",
                         color: "#000",
                       }}
                     >
-                      {c.label} (→ {c.to})
+                      {c.isDroppedItem ? c.label : `${c.label} (→ ${c.to})`}
                     </button>
                   ))}
                 </div>

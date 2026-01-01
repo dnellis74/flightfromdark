@@ -13,6 +13,7 @@ export type ActionSheet = {
   inventory: Inventory;
   flags: Record<string, boolean>;
   removedChoices: number[];
+  droppedItems: Record<number, string[]>; // sectionId -> array of item names
 };
 
 export type Enemy = {
@@ -58,7 +59,7 @@ export type MultiCombatResult = {
 };
 
 export type Action = {
-  type: "update_stat" | "set_stat" | "add_item" | "remove_item" | "set_flag" | "start_combat" | "remove_choice";
+  type: "update_stat" | "set_stat" | "add_item" | "remove_item" | "set_flag" | "start_combat" | "remove_choice" | "drop_item";
   reason: string;
   stat: "endurance" | "combatSkill" | "gold";
   delta: number;
@@ -67,11 +68,63 @@ export type Action = {
   flag: string;
   flagValue: boolean;
   combat: Combat;
+  sectionId?: number; // For drop_item: optional, defaults to currentSectionId passed to applyActions
 };
 
 export type CombatModifiers = {
   combatSkillBonus?: number;
 };
+
+// Weapon keywords
+const WEAPON_KEYWORDS = new Set([
+  "SWORD", "AXE", "AX", "DAGGER", "MACE", "SPEAR", "BOW", "ARROW", "ARROWS", "QUIVER",
+  "WHIP", "CLUB", "STAFF", "HAMMER", "FLAIL", "SCIMITAR", "RAPIER", "CUTLASS"
+]);
+
+// Special item location mappings
+const SPECIAL_LOCATIONS: Record<string, string> = {
+  "HELMET": "head",
+  "CROWN": "head",
+  "HAT": "head",
+  "CAP": "head",
+  "AMULET": "neck",
+  "PENDANT": "neck",
+  "NECKLACE": "neck",
+  "RING": "finger",
+  "GLOVES": "hands",
+  "GAUNTLETS": "hands",
+  "BOOTS": "feet",
+  "SHOES": "feet",
+  "CLOAK": "back",
+  "CAPE": "back",
+  "SHIELD": "arm",
+  "BRACELET": "wrist",
+  "BELT": "waist"
+};
+
+// Determine which inventory slot an item should go to
+export function getItemCategory(item: string): "weapon" | "backpack" | "special" {
+  const upperItem = item.toUpperCase();
+  
+  // Check if it's a weapon
+  if (WEAPON_KEYWORDS.has(upperItem)) {
+    return "weapon";
+  }
+  
+  // Check if it's a special item with a known location
+  if (SPECIAL_LOCATIONS[upperItem]) {
+    return "special";
+  }
+  
+  // Default to backpack
+  return "backpack";
+}
+
+// Get special item location if applicable
+export function getSpecialItemLocation(item: string): string | null {
+  const upperItem = item.toUpperCase();
+  return SPECIAL_LOCATIONS[upperItem] || null;
+}
 
 // Get a random number from 0-9 (Random Number Table)
 function getRandomNumber(): number {
@@ -308,7 +361,7 @@ export type ApplyActionsResult = {
   combatLog: string[];
 };
 
-export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActionsResult {
+export function applyActions(prev: ActionSheet, actions: Action[], currentSectionId?: number): ApplyActionsResult {
   const next: ActionSheet = {
     ...prev,
     inventory: {
@@ -319,6 +372,7 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
     },
     flags: { ...prev.flags },
     removedChoices: [...prev.removedChoices],
+    droppedItems: { ...prev.droppedItems },
   };
   
   const combatLogs: string[] = [];
@@ -340,11 +394,49 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
       } else if (a.stat === "gold") {
         next.inventory.pouch = a.value;
       }
-    } else if (a.type === "add_item") {
-      // For now, add items to backpack. This can be refined later to handle weapons and special items.
-      if (!next.inventory.backpack.includes(a.item)) {
-        next.inventory.backpack.push(a.item);
+    } else if (a.type === "drop_item") {
+      // Drop an item at a specific section (makes it available to pick up)
+      // Use sectionId from action if provided, otherwise use currentSectionId
+      const sectionId = a.sectionId ?? currentSectionId;
+      if (sectionId && a.item) {
+        const existingItems = next.droppedItems[sectionId] || [];
+        if (!existingItems.includes(a.item)) {
+          // Create a new array to ensure React detects the change
+          next.droppedItems = {
+            ...next.droppedItems,
+            [sectionId]: [...existingItems, a.item],
+          };
+          console.log(`[applyActions] Dropped item "${a.item}" at section ${sectionId}. Updated droppedItems:`, next.droppedItems);
+        } else {
+          console.log(`[applyActions] Item "${a.item}" already dropped at section ${sectionId}`);
+        }
+      } else {
+        console.warn("[applyActions] drop_item action missing item or sectionId:", { item: a.item, sectionId, currentSectionId });
       }
+    } else if (a.type === "add_item") {
+      // Categorize item and add to appropriate inventory slot
+      const category = getItemCategory(a.item);
+      
+      if (category === "weapon") {
+        // Add to weapons if there's space (max 2)
+        if (next.inventory.weapons.length < 2 && !next.inventory.weapons.includes(a.item)) {
+          next.inventory.weapons.push(a.item);
+        }
+      } else if (category === "backpack") {
+        // Add to backpack if there's space (max 8)
+        if (next.inventory.backpack.length < 8 && !next.inventory.backpack.includes(a.item)) {
+          next.inventory.backpack.push(a.item);
+        }
+      } else if (category === "special") {
+        // Add to special items with location
+        const location = getSpecialItemLocation(a.item);
+        if (location && !next.inventory.special.some(([loc, item]) => loc === location && item === a.item)) {
+          next.inventory.special.push([location, a.item]);
+        }
+      }
+      
+      // Remove from dropped items if it was dropped at current section
+      // (This will be handled by the component when processing the choice)
     } else if (a.type === "remove_item") {
       // Remove from backpack, weapons, or special items
       next.inventory.backpack = next.inventory.backpack.filter((x) => x !== a.item);
@@ -371,6 +463,7 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
         next.inventory = multiCombatResult.updatedSheet.inventory;
         next.flags = multiCombatResult.updatedSheet.flags;
         next.removedChoices = multiCombatResult.updatedSheet.removedChoices;
+        next.droppedItems = multiCombatResult.updatedSheet.droppedItems;
         combatLogs.push(...multiCombatResult.combatLog);
       }
     }
