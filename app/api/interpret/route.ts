@@ -29,6 +29,14 @@ const RequestBody = z.object({
 // IMPORTANT: OpenAI Structured Outputs enforces that for any object schema,
 // `required` must include EVERY key in `properties`. That effectively forbids optional fields.
 // Workaround: use a "wide" action object with neutral defaults for unused fields.
+const EnemySchema = z.object({
+  enemyType: z.string(),
+  enemyName: z.string(),
+  combatSkill: z.number().int(),
+  endurance: z.number().int(),
+  combatModifier: z.number().int().optional().default(0),
+});
+
 const ActionWide = z
   .object({
     type: z.enum(ACTION_TYPES),
@@ -44,7 +52,7 @@ const ActionWide = z
     flag: z.string(),
     flagValue: z.boolean(),
 
-    enemyName: z.string(),
+    enemies: z.array(EnemySchema),
   })
   .strict();
 
@@ -74,14 +82,6 @@ Rules:
 - If uncertain, emit no actions and explain briefly in gmMessage.
 - If a game rule prohibits a choice, remove that choice from the choices array.
 - If a section ends with a single instruction like “Turn to 19.” and no alternatives are presented, treat it as a mandatory continuation, not a choice. Do not remove it and do not label it as a choice.
-
-Game rules:
-- The maximum number of weapons that you may carry is two.
-- Backpack Items must be stored in your Backpack. Because space is limited, you may only keep a maximum of eight articles, including Meals, in your Backpack at any one time.
-- Special Items are not carried in the Backpack. When you discover a Special Item, you will be told how to carry it.
-- Gold Crowns are always carried in the Belt Pouch. It will hold a maximum of fifty crowns.
-- Food is carried in your Backpack. Each Meal counts as one item.
-- Any item that may be of use and can be picked up on your adventure and entered on your Action Chart is given capital letters in the text. Unless you are told it is a Special Item, carry it in your Backpack.
 - If a choice requires a discipline
 -- Check the flags in the action sheet for the discipline.
 -- If a flag for the discipline is not present
@@ -93,7 +93,16 @@ Game rules:
 -- Emit stat changes as indicated by the choice
 - If the section text or choices mention you must turn to a specific section, emit a remove_choice action with value set to the section to be removed.
 
-Structured output constraints:
+Game rules:
+- The maximum number of weapons that you may carry is two.
+- Backpack Items must be stored in your Backpack. Because space is limited, you may only keep a maximum of eight articles, including Meals, in your Backpack at any one time.
+- Special Items are not carried in the Backpack. When you discover a Special Item, you will be told how to carry it.
+- Gold Crowns are always carried in the Belt Pouch. It will hold a maximum of fifty crowns.
+- Food is carried in your Backpack. Each Meal counts as one item.
+- Any item that may be of use and can be picked up on your adventure and entered on your Action Chart is given capital letters in the text. Unless you are told it is a Special Item, carry it in your Backpack.
+
+
+Structured output hard constraints:
 - You MUST return JSON matching the schema exactly.
 - Because all fields are required, for fields that do not apply to an action type, use neutral defaults:
   stat: "endurance"
@@ -101,10 +110,17 @@ Structured output constraints:
   value: 0
   item: ""
   flag: ""
-  flagValue: []
-  enemyName: ""
+  flagValue: false
+  enemies: []
 - Only the fields relevant to the action type should be non-default.
 - For remove_choice: set value to the section ID (the 'to' field from the choice object, e.g., if choice is {to: 150, label: "Go north"}, set value: 150)
+- For start_combat: set enemies to an array of enemy objects. Each enemy object must have:
+  - enemyType: string (e.g., "Giant Vulture", "Giak", "Doomwolf")
+  - enemyName: string (e.g., "Vicious Vulture", "Giak Warrior", "Pack Leader")
+  - combatSkill: integer (the enemy's combat skill)
+  - endurance: integer (the enemy's endurance points)
+  - combatModifier: integer (optional, defaults to 0, any combat skill bonus/penalty)
+  If combat involves multiple enemies, include all of them in the array. For single enemy combat, use an array with one enemy object.
 
 Output MUST be valid JSON. Do not include markdown.
 `.trim();
@@ -149,7 +165,21 @@ ${body.userMessage || "(none)"}
               flag: { type: "string" },
               flagValue: { type: "boolean" },
 
-              enemyName: { type: "string" },
+              enemies: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    enemyType: { type: "string" },
+                    enemyName: { type: "string" },
+                    combatSkill: { type: "integer" },
+                    endurance: { type: "integer" },
+                    combatModifier: { type: "integer" },
+                  },
+                  required: ["enemyType", "enemyName", "combatSkill", "endurance", "combatModifier"],
+                },
+              },
             },
             // REQUIRED MUST INCLUDE ALL PROPERTIES
             required: [
@@ -161,7 +191,7 @@ ${body.userMessage || "(none)"}
               "item",
               "flag",
               "flagValue",
-              "enemyName",
+              "enemies",
             ],
           },
         },

@@ -10,9 +10,11 @@ export type ActionSheet = {
 };
 
 export type Enemy = {
-  name: string;
+  enemyType: string;
+  enemyName: string;
   combatSkill: number;
   endurance: number;
+  combatModifier?: number;
 };
 
 export type CombatRound = {
@@ -36,6 +38,14 @@ export type CombatResult = {
   winner: "Lone Wolf" | "Enemy" | null;
 };
 
+export type MultiCombatResult = {
+  updatedSheet: ActionSheet;
+  combatLog: string[];
+  allRounds: CombatRound[];
+  winners: Array<{ enemy: Enemy; winner: "Lone Wolf" | "Enemy" | null }>;
+  overallWinner: "Lone Wolf" | "Enemy" | null;
+};
+
 export type Action = {
   type: "update_stat" | "set_stat" | "add_item" | "remove_item" | "set_flag" | "start_combat" | "remove_choice";
   reason: string;
@@ -45,11 +55,7 @@ export type Action = {
   item: string;
   flag: string;
   flagValue: boolean;
-  enemyName: string;
-  // For start_combat: enemy combat skill and endurance
-  // These can be extracted from the action's value/delta fields or parsed from section text
-  enemyCombatSkill?: number;
-  enemyEndurance?: number;
+  enemies: Enemy[];
 };
 
 export type CombatModifiers = {
@@ -84,12 +90,17 @@ export function resolveCombat(
   const combatSkillBonus = modifiers.combatSkillBonus ?? 0;
   const totalLoneWolfCS = sheet.combatSkill + combatSkillBonus;
 
-  combatLog.push(`Combat begins: ${enemy.name} (CS: ${enemy.combatSkill}, EP: ${enemy.endurance}) vs Lone Wolf (CS: ${sheet.combatSkill}${combatSkillBonus !== 0 ? ` + ${combatSkillBonus}` : ""}, EP: ${loneWolfEndurance})`);
+  const enemyDisplayName = enemy.enemyName || enemy.enemyType || "Enemy";
+  const enemyModifier = enemy.combatModifier ?? 0;
+  const enemyCSDisplay = enemy.combatSkill + (enemyModifier !== 0 ? enemyModifier : 0);
+  const enemyCSStr = enemyModifier !== 0 ? `${enemy.combatSkill} + ${enemyModifier} = ${enemyCSDisplay}` : `${enemy.combatSkill}`;
+  combatLog.push(`Combat begins: ${enemyDisplayName} (CS: ${enemyCSStr}, EP: ${enemy.endurance}) vs Lone Wolf (CS: ${sheet.combatSkill}${combatSkillBonus !== 0 ? ` + ${combatSkillBonus}` : ""}, EP: ${loneWolfEndurance})`);
 
   // Combat loop continues until one character's endurance reaches 0 or below
   while (loneWolfEndurance > 0 && enemyEndurance > 0) {
-    // Calculate Combat Ratio: (Lone Wolf CS + modifiers) - Enemy CS
-    const combatRatio = totalLoneWolfCS - enemy.combatSkill;
+    // Calculate Combat Ratio: (Lone Wolf CS + modifiers) - (Enemy CS + enemy modifiers)
+    const enemyCombatSkill = enemy.combatSkill + (enemy.combatModifier ?? 0);
+    const combatRatio = totalLoneWolfCS - enemyCombatSkill;
     const clampedRatio = clampRatio(combatRatio);
 
     // Pick a number from the Random Number Table (0-9)
@@ -118,6 +129,7 @@ export function resolveCombat(
       // Normal combat: both take damage
       if (roundResult.enemy === "K") {
         enemyEndurance = 0;
+        combatLog.push(`${enemyDisplayName} is killed!`);
       } else {
         enemyEndurance -= roundResult.enemy;
       }
@@ -165,13 +177,13 @@ export function resolveCombat(
   let winner: "Lone Wolf" | "Enemy" | null = null;
   if (loneWolfEndurance <= 0 && enemyEndurance <= 0) {
     combatLog.push("Combat ends in mutual destruction!");
-  } else if (loneWolfEndurance <= 0) {
-    winner = "Enemy";
-    combatLog.push(`${enemy.name} wins! Lone Wolf is defeated.`);
-  } else if (enemyEndurance <= 0) {
-    winner = "Lone Wolf";
-    combatLog.push(`Lone Wolf wins! ${enemy.name} is defeated.`);
-  }
+      } else if (loneWolfEndurance <= 0) {
+        winner = "Enemy";
+        combatLog.push(`${enemyDisplayName} wins! Lone Wolf is defeated.`);
+      } else if (enemyEndurance <= 0) {
+        winner = "Lone Wolf";
+        combatLog.push(`Lone Wolf wins! ${enemyDisplayName} is defeated.`);
+      }
 
   // Update the action sheet with new endurance
   const updatedSheet: ActionSheet = {
@@ -204,13 +216,69 @@ function getCRTResult(ratio: number, dieRoll: number): CRTCell {
   return result;
 }
 
-// Helper to extract enemy data from a start_combat action
-// Enemy stats may be in the action fields or need to be parsed from section text
-export function extractEnemyFromAction(action: Action, defaultCS: number = 15, defaultEP: number = 20): Enemy {
+// Resolve combat against multiple enemies sequentially
+export function resolveMultiCombat(
+  sheet: ActionSheet,
+  enemies: Enemy[],
+  modifiers: CombatModifiers = {},
+  evade: boolean = false
+): MultiCombatResult {
+  const allCombatLogs: string[] = [];
+  const allRounds: CombatRound[] = [];
+  const winners: Array<{ enemy: Enemy; winner: "Lone Wolf" | "Enemy" | null }> = [];
+  
+  let currentSheet = sheet;
+  let overallWinner: "Lone Wolf" | "Enemy" | null = null;
+
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    if (!enemy) continue; // Skip if undefined
+    
+    // If Lone Wolf is already dead, skip remaining enemies
+    if (currentSheet.endurance <= 0) {
+      allCombatLogs.push(`\n${enemy.enemyName || enemy.enemyType} is not fought - Lone Wolf is already defeated.`);
+      winners.push({ enemy, winner: "Enemy" });
+      overallWinner = "Enemy";
+      continue;
+    }
+
+    // Add separator between combats if multiple enemies
+    if (i > 0) {
+      allCombatLogs.push(`\n=== Next Combat ===`);
+    }
+
+    // Fight this enemy
+    const combatResult = resolveCombat(currentSheet, enemy, modifiers, evade);
+    
+    // Append this combat's logs
+    allCombatLogs.push(...combatResult.combatLog);
+    allRounds.push(...combatResult.rounds);
+    winners.push({ enemy, winner: combatResult.winner });
+    
+    // Update sheet for next combat
+    currentSheet = combatResult.updatedSheet;
+
+    // If Lone Wolf lost, stop fighting remaining enemies
+    if (combatResult.winner === "Enemy") {
+      overallWinner = "Enemy";
+      if (i < enemies.length - 1) {
+        allCombatLogs.push(`\nLone Wolf is defeated. Remaining enemies are not fought.`);
+      }
+      break;
+    }
+  }
+
+  // If we fought all enemies and Lone Wolf survived, Lone Wolf wins overall
+  if (overallWinner === null && currentSheet.endurance > 0) {
+    overallWinner = "Lone Wolf";
+  }
+
   return {
-    name: action.enemyName || "Enemy",
-    combatSkill: action.enemyCombatSkill ?? defaultCS,
-    endurance: action.enemyEndurance ?? defaultEP,
+    updatedSheet: currentSheet,
+    combatLog: allCombatLogs,
+    allRounds,
+    winners,
+    overallWinner,
   };
 }
 
@@ -260,14 +328,19 @@ export function applyActions(prev: ActionSheet, actions: Action[]): ApplyActions
         next.removedChoices.push(choiceSectionId);
       }
     } else if (a.type === "start_combat") {
-      const enemy = extractEnemyFromAction(a);
-      // Calculate combat modifiers from flags/disciplines
-      const modifiers: CombatModifiers = {
-        combatSkillBonus: 0, // TODO: Calculate from disciplines/flags
-      };
-      const combatResult = resolveCombat(next, enemy, modifiers, false);
-      next.endurance = combatResult.updatedSheet.endurance;
-      combatLogs.push(...combatResult.combatLog);
+      // Fight all enemies in the array sequentially
+      if (a.enemies && a.enemies.length > 0) {
+        // Calculate combat modifiers from flags/disciplines
+        const modifiers: CombatModifiers = {
+          combatSkillBonus: 0, // TODO: Calculate from disciplines/flags
+        };
+        const multiCombatResult = resolveMultiCombat(next, a.enemies, modifiers, false);
+        next.endurance = multiCombatResult.updatedSheet.endurance;
+        next.items = multiCombatResult.updatedSheet.items;
+        next.flags = multiCombatResult.updatedSheet.flags;
+        next.removedChoices = multiCombatResult.updatedSheet.removedChoices;
+        combatLogs.push(...multiCombatResult.combatLog);
+      }
     }
   }
 

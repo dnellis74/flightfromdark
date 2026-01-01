@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { applyActions, type ActionSheet, type Action } from "../lib/gameLogic";
 
 function useIsMobile() {
@@ -317,6 +318,52 @@ export default function SectionViewer() {
           </div>
         </>
       ) : null}
+            <details
+        style={{
+          marginBottom: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: isMobile ? 10 : 12,
+          background: "#fff",
+        }}
+      >
+        <summary
+          style={{
+            cursor: "pointer",
+            fontWeight: 700,
+            fontSize: isMobile ? 14 : 16,
+            padding: "4px 0",
+            userSelect: "none",
+          }}
+        >
+          Map of Sommerlund
+        </summary>
+        <div
+          style={{
+            marginTop: 12,
+            textAlign: "center",
+            borderRadius: 6,
+            overflow: "hidden",
+            background: "#f5f5f5",
+            padding: isMobile ? 8 : 12,
+          }}
+        >
+          <Image
+            src="https://www.projectaon.org/en/xhtml/lw/01fftd/map.png"
+            alt="Map of Sommerlund"
+            width={1024}
+            height={768}
+            style={{
+              maxWidth: "100%",
+              height: "auto",
+              borderRadius: 4,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            }}
+            unoptimized
+          />
+        </div>
+      </details>
     </div>
+  
   );
 }
