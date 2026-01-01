@@ -25,7 +25,17 @@ const RequestBody = z.object({
     }),
     flags: z.record(z.string(), z.boolean()),
     removedChoices: z.array(z.number().int()),
-    droppedItems: z.record(z.number().int(), z.array(z.string())),
+    droppedItems: z.record(z.string(), z.array(z.string())).transform((obj) => {
+      // Convert string keys to numbers for internal use
+      const result: Record<number, string[]> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        const numKey = Number(key);
+        if (!isNaN(numKey) && numKey > 0) {
+          result[numKey] = value;
+        }
+      }
+      return result;
+    }),
   }),
   userMessage: z.string().optional().default(""),
 });
@@ -80,19 +90,6 @@ export async function POST(req: Request) {
     }
 
     const json = await req.json();
-    
-    // Convert droppedItems string keys to numbers (JSON always uses string keys for object keys)
-    if (json.sheet?.droppedItems && typeof json.sheet.droppedItems === 'object') {
-      const converted: Record<number, string[]> = {};
-      for (const [key, value] of Object.entries(json.sheet.droppedItems)) {
-        const numKey = Number(key);
-        if (!isNaN(numKey) && Array.isArray(value)) {
-          converted[numKey] = value as string[];
-        }
-      }
-      json.sheet.droppedItems = converted;
-    }
-    
     const body = RequestBody.parse(json);
 
     const system = `
