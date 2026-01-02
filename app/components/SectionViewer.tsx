@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { applyActions, type ActionSheet, type Action } from "../lib/gameLogic";
+import { applyActions, type ActionSheet, type Action, getItemCategory } from "../lib/gameLogic";
 import { SKIP_LLM_SECTIONS } from "../api/interpret/route";
 
 function useIsMobile() {
@@ -90,6 +90,7 @@ export default function SectionViewer() {
   const [interpretErr, setInterpretErr] = useState<string>("");
   const [interpreting, setInterpreting] = useState<boolean>(false);
   const [combatLog, setCombatLog] = useState<string[]>([]);
+  const [inventoryWarning, setInventoryWarning] = useState<string>("");
 
   // Handler for dropping items
   const handleDropItem = (item: string, currentSectionId: number) => {
@@ -208,7 +209,13 @@ export default function SectionViewer() {
         // Filter out already-removed choices and dropped item choices before sending to API
         const availableChoices = section.choices
           .filter((c) => !c.isDroppedItem && !sheet.removedChoices.includes(c.to))
-          .map(({ isDroppedItem: _, itemName: __, ...choice }) => choice); // Remove dropped item fields
+          .map((choice) => {
+            // Remove dropped item fields - destructure to exclude isDroppedItem and itemName
+            const { isDroppedItem: _isDroppedItem, itemName: _itemName, ...rest } = choice;
+            void _isDroppedItem; // Explicitly mark as intentionally unused
+            void _itemName; // Explicitly mark as intentionally unused
+            return rest;
+          });
 
         const res = await fetch("/api/interpret", {
           method: "POST",
@@ -359,6 +366,20 @@ export default function SectionViewer() {
               ))}
             </div>
           )}
+          {inventoryWarning && (
+            <div style={{ 
+              marginTop: 8, 
+              padding: "8px 12px", 
+              background: "#fff3cd", 
+              border: "1px solid #ffc107", 
+              borderRadius: 4,
+              color: "#856404",
+              fontSize: isMobile ? 12 : 13,
+              fontWeight: 500,
+            }}>
+              {inventoryWarning}
+            </div>
+          )}
         </div>
 
         <div style={{ flex: isMobile ? "none" : 2, border: "1px solid #ddd", borderRadius: 8, padding: isMobile ? 10 : 12 }}>
@@ -460,6 +481,40 @@ export default function SectionViewer() {
                         if (c.isDroppedItem && c.itemName) {
                           // Emit add_item action for dropped item
                           const itemName = c.itemName;
+                          
+                          // Validate inventory limits before adding
+                          const category = getItemCategory(itemName);
+                          let canAdd = true;
+                          let warningMessage = "";
+                          
+                          if (category === "weapon") {
+                            if (sheet.inventory.weapons.length >= 2) {
+                              canAdd = false;
+                              warningMessage = "Weapon limit reached. Drop a weapon.";
+                            } else if (sheet.inventory.weapons.includes(itemName)) {
+                              canAdd = false;
+                              warningMessage = "You already have this weapon.";
+                            }
+                          } else if (category === "backpack") {
+                            if (sheet.inventory.backpack.length >= 8) {
+                              canAdd = false;
+                              warningMessage = "Backpack limit reached. Drop an item.";
+                            } else if (sheet.inventory.backpack.includes(itemName)) {
+                              canAdd = false;
+                              warningMessage = "You already have this item in your backpack.";
+                            }
+                          }
+                          
+                          if (!canAdd) {
+                            setInventoryWarning(warningMessage);
+                            // Clear warning after 3 seconds
+                            setTimeout(() => setInventoryWarning(""), 3000);
+                            return;
+                          }
+                          
+                          // Clear any previous warnings
+                          setInventoryWarning("");
+                          
                           const addItemAction: Action = {
                             type: "add_item",
                             reason: `Picked up ${itemName} from section ${section.id}`,
