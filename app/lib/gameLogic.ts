@@ -1,18 +1,5 @@
 import { CRT, type CRTCell } from "./crt";
 
-// Section IDs that should skip LLM processing
-export const SKIP_LLM_SECTIONS: number[] = [
-  // Add section IDs here that should not be sent to the LLM
-  // Example: 1, 2, 3
-  85, 215, 14, 195, 106, 157, 261, 6, 132, 64, 16, 214, 125, 27, 250,
-  186, 8, 28, 201, 192, 171, 265, 142, 68, 35,
-  30, 194, 264, //Refugee sections
-  78, //Merchants caravan
-  102, 284, 65, 104, 26, 100, 257, 266, 209, 317, 61, 268, 288, 292, // Graveyard sections
-  135, 218, 75, 163, 321, 273, 179, 318,//River sections
-  129, 3, 196, 332, 350, 217, 198, 152, 60 //Holmgard sections
-];
-
 export interface Inventory {
   weapons: string[]; // Two weapon slots
   pouch: number; // Gold stored as int

@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { applyActions, type ActionSheet, type Action, SKIP_LLM_SECTIONS } from "../lib/gameLogic";
+import { applyActions, type ActionSheet, type Action } from "../lib/gameLogic";
+import { SKIP_LLM_SECTIONS } from "../api/interpret/route";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
