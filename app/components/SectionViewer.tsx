@@ -91,6 +91,40 @@ export default function SectionViewer() {
   const [interpreting, setInterpreting] = useState<boolean>(false);
   const [combatLog, setCombatLog] = useState<string[]>([]);
 
+  // Handler for dropping items
+  const handleDropItem = (item: string, currentSectionId: number) => {
+    const dropItemAction: Action = {
+      type: "drop_item",
+      reason: `Dropped ${item} at section ${currentSectionId}`,
+      stat: "endurance",
+      delta: 0,
+      value: 0,
+      item: item,
+      flag: "",
+      flagValue: false,
+      combat: { combatModifier: 0, enemy: [] },
+      sectionId: currentSectionId,
+    };
+    
+    const removeItemAction: Action = {
+      type: "remove_item",
+      reason: `Removed ${item} from inventory`,
+      stat: "endurance",
+      delta: 0,
+      value: 0,
+      item: item,
+      flag: "",
+      flagValue: false,
+      combat: { combatModifier: 0, enemy: [] },
+    };
+    
+    const result = applyActions(sheet, [dropItemAction, removeItemAction], currentSectionId);
+    setSheet(result.updatedSheet);
+    if (result.combatLog.length > 0) {
+      setCombatLog(result.combatLog);
+    }
+  };
+
   // 1) Fetch section HTML
   useEffect(() => {
     let cancelled = false;
@@ -242,14 +276,87 @@ export default function SectionViewer() {
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Endurance: {sheet.endurance}</div>
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Gold: {sheet.inventory.pouch}</div>
           {sheet.inventory.weapons.length > 0 && (
-            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Weapons: {sheet.inventory.weapons.join(", ") || "(none)"}</div>
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
+              <div style={{ marginBottom: 4 }}>Weapons:</div>
+              {sheet.inventory.weapons.map((weapon, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, marginTop: 2 }}>
+                  <span>{weapon}</span>
+                  <button
+                    onClick={() => handleDropItem(weapon, section?.id || id)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#d32f2f",
+                      cursor: "pointer",
+                      fontSize: isMobile ? 16 : 14,
+                      fontWeight: 700,
+                      padding: "0 4px",
+                      lineHeight: 1,
+                      minWidth: 20,
+                      minHeight: 20,
+                    }}
+                    title={`Drop ${weapon}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
           {sheet.inventory.backpack.length > 0 && (
-            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>Backpack: {sheet.inventory.backpack.join(", ")}</div>
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
+              <div style={{ marginBottom: 4 }}>Backpack:</div>
+              {sheet.inventory.backpack.map((item, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, marginTop: 2 }}>
+                  <span>{item}</span>
+                  <button
+                    onClick={() => handleDropItem(item, section?.id || id)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#d32f2f",
+                      cursor: "pointer",
+                      fontSize: isMobile ? 16 : 14,
+                      fontWeight: 700,
+                      padding: "0 4px",
+                      lineHeight: 1,
+                      minWidth: 20,
+                      minHeight: 20,
+                    }}
+                    title={`Drop ${item}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
           {sheet.inventory.special.length > 0 && (
             <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
-              Special: {sheet.inventory.special.map(([loc, item]) => `${loc}: ${item}`).join(", ")}
+              <div style={{ marginBottom: 4 }}>Special:</div>
+              {sheet.inventory.special.map(([loc, item], idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, marginTop: 2 }}>
+                  <span>{loc}: {item}</span>
+                  <button
+                    onClick={() => handleDropItem(item, section?.id || id)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#d32f2f",
+                      cursor: "pointer",
+                      fontSize: isMobile ? 16 : 14,
+                      fontWeight: 700,
+                      padding: "0 4px",
+                      lineHeight: 1,
+                      minWidth: 20,
+                      minHeight: 20,
+                    }}
+                    title={`Drop ${item}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
