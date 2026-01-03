@@ -78,9 +78,15 @@ export default function SectionViewer() {
       weapons: ["Axe"],
       pouch: 0,
       backpack: [],
-      special: [],
+      special: [["Body", "Chainmail Waistcoat"]]
     },
-    flags: {"Sixth Sense": true},
+    flags: {
+              "Sixth Sense": true,
+              "Healing": true,
+              "Weaponskill:Axe": true,
+              "Mindshield": true,
+              "Mindblast": true,
+    },
     removedChoices: [],
     droppedItems: {},
   });
@@ -282,6 +288,18 @@ export default function SectionViewer() {
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Combat Skill: {sheet.combatSkill}</div>
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Endurance: {sheet.endurance}</div>
           <div style={{ fontSize: isMobile ? 13 : 14 }}>Gold: {sheet.inventory.pouch}</div>
+          {Object.keys(sheet.flags).filter(flag => sheet.flags[flag]).length > 0 && (
+            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
+              <div style={{ marginBottom: 4 }}>Disciplines:</div>
+              {Object.keys(sheet.flags)
+                .filter(flag => sheet.flags[flag])
+                .map((flag, idx) => (
+                  <div key={idx} style={{ marginLeft: 8, marginTop: 2 }}>
+                    {flag}
+                  </div>
+                ))}
+            </div>
+          )}
           {sheet.inventory.weapons.length > 0 && (
             <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
               <div style={{ marginBottom: 4 }}>Weapons:</div>
@@ -310,10 +328,10 @@ export default function SectionViewer() {
               ))}
             </div>
           )}
-          {sheet.inventory.backpack.length > 0 && (
-            <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
-              <div style={{ marginBottom: 4 }}>Backpack:</div>
-              {sheet.inventory.backpack.map((item, idx) => (
+          <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
+            <div style={{ marginBottom: 4 }}>Backpack:</div>
+            {sheet.inventory.backpack.length > 0 ? (
+              sheet.inventory.backpack.map((item, idx) => (
                 <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, marginTop: 2 }}>
                   <span>{item}</span>
                   <button
@@ -335,9 +353,11 @@ export default function SectionViewer() {
                     ×
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            ) : (
+              <div style={{ marginLeft: 8, marginTop: 2, opacity: 0.6, fontStyle: "italic" }}>(empty)</div>
+            )}
+          </div>
           {sheet.inventory.special.length > 0 && (
             <div style={{ fontSize: isMobile ? 13 : 14, marginTop: 4 }}>
               <div style={{ marginBottom: 4 }}>Special:</div>
