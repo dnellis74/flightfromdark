@@ -77,7 +77,7 @@ export default function SectionViewer() {
     inventory: {
       weapons: ["Axe"],
       pouch: 0,
-      backpack: [],
+      backpack: ["Meal"],
       special: [["Body", "Chainmail Waistcoat"]]
     },
     flags: {

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const SKIP_LLM_SECTIONS: number[] = [
   // Add section IDs here that should not be sent to the LLM
   140, 56, 85, 215, 14, 195, 106, 157, 261, 6, 132, 64, 16, 214, 125, 27, 250,
-  186, 8, 28, 201, 192, 171, 265, 142, 68, 35,
+  186, 8, 28, 201, 192, 171, 265, 142, 68, 35, 70, 
   30, 194, 264, //Refugee sections
   78, //Merchants caravan
   102, 284, 65, 104, 26, 100, 257, 266, 209, 317, 61, 268, 288, 292, // Graveyard sections
